@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>수학 질문 톡!</title>
+
+  <!-- Tailwind CSS (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50: '#eef2ff', 100: '#e0e7ff', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' }
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", "Noto Sans KR", sans-serif; }
+    .tab-btn.active { color: #4f46e5; border-color: #4f46e5; background: #eef2ff; }
+    .spinner { width: 1.1rem; height: 1.1rem; border: 2.5px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 9999px; animation: spin .7s linear infinite; }
+    .spinner-dark { border-color: rgba(79,70,229,.25); border-top-color: #4f46e5; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .skeleton { background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 37%, #f1f5f9 63%); background-size: 400% 100%; animation: shimmer 1.4s ease infinite; }
+    @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+    .chip.active { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+    textarea { resize: vertical; }
+    #toast { transition: opacity .25s, transform .25s; }
+  </style>
+</head>
+
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+  <!-- ===== 헤더 ===== -->
+  <header class="bg-white/90 backdrop-blur border-b border-slate-200 sticky top-0 z-30">
+    <div class="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
+      <div class="w-10 h-10 rounded-2xl bg-brand-600 text-white grid place-items-center text-xl shadow-sm">📐</div>
+      <div>
+        <h1 class="text-lg font-extrabold leading-tight">수학 질문 톡!</h1>
+        <p class="text-xs text-slate-500">궁금한 문제, 사진 한 장으로 바로 질문해요</p>
+      </div>
+    </div>
+
+    <!-- 탭 -->
+    <nav class="max-w-2xl mx-auto px-2 grid grid-cols-3 gap-1 pb-2">
+      <button class="tab-btn active rounded-xl border border-transparent py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100" data-tab="ask">✏️ 질문하기</button>
+      <button class="tab-btn rounded-xl border border-transparent py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100" data-tab="feed">💬 질문 모아보기</button>
+      <button class="tab-btn rounded-xl border border-transparent py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100" data-tab="admin">👩‍🏫 선생님</button>
+    </nav>
+  </header>
+
+  <!-- ===== 웹 앱 주소 연결 안내 (Apps Script 밖에서 열었을 때만 표시) ===== -->
+  <div id="setupBanner" class="hidden bg-amber-50 border-b border-amber-200">
+    <div class="max-w-2xl mx-auto px-4 py-3 text-sm text-amber-900 space-y-2">
+      <p class="font-bold">⚠️ 아직 서버(Apps Script)와 연결되지 않았어요</p>
+      <p class="text-xs leading-relaxed">
+        이 화면을 파일로 직접 열었거나 다른 서버에 올린 상태예요. 가장 쉬운 방법은 Apps Script 에서 <b>배포 → 웹 앱</b> 으로 받은
+        <code>https://script.google.com/macros/s/…/exec</code> 주소로 접속하는 거예요.<br>
+        지금 화면을 그대로 쓰려면 아래에 그 주소를 붙여 넣어 주세요. (이 브라우저에만 저장됩니다)
+      </p>
+      <div class="flex gap-2">
+        <input id="apiUrlInput" type="url" placeholder="https://script.google.com/macros/s/…/exec"
+          class="flex-1 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400">
+        <button id="apiUrlSaveBtn" type="button" class="rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold px-3 py-2">연결</button>
+      </div>
+    </div>
+  </div>
+
+  <main class="flex-1 w-full max-w-2xl mx-auto px-4 py-5 pb-16">
+
+    <!-- ===== 탭 1: 질문하기 ===== -->
+    <section id="tab-ask" class="space-y-4">
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
+        <div>
+          <label for="questionText" class="block text-sm font-bold mb-1.5">질문 내용</label>
+          <textarea id="questionText" rows="5" maxlength="1000"
+            class="w-full rounded-xl border border-slate-300 px-3.5 py-3 text-[15px] focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 placeholder:text-slate-400"
+            placeholder="어떤 문제가 궁금한가요?&#10;예) 교과서 52쪽 3번 문제에서 왜 양변을 2로 나누나요?"></textarea>
+          <div class="flex justify-between mt-1 text-xs text-slate-400">
+            <span>이름이나 학번은 필요 없어요 🙂</span>
+            <span><span id="charCount">0</span> / 1000</span>
+          </div>
+        </div>
+
+        <!-- 사진 첨부 -->
+        <div>
+          <p class="text-sm font-bold mb-1.5">수식 사진 (선택)</p>
+          <div class="grid grid-cols-2 gap-2">
+            <label for="cameraInput"
+              class="cursor-pointer flex flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-brand-500/60 bg-brand-50 text-brand-700 py-4 text-sm font-semibold hover:bg-brand-100 active:scale-[.98] transition">
+              <span class="text-2xl">📷</span>카메라로 직접 촬영하기
+            </label>
+            <label for="fileInput"
+              class="cursor-pointer flex flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 text-slate-600 py-4 text-sm font-semibold hover:bg-slate-100 active:scale-[.98] transition">
+              <span class="text-2xl">🖼️</span>사진 파일 선택
+            </label>
+          </div>
+          <!-- 카메라 바로 열기 (모바일) -->
+          <input id="cameraInput" type="file" accept="image/*" capture="environment" class="hidden">
+          <!-- 갤러리/파일 선택 -->
+          <input id="fileInput" type="file" accept="image/*" class="hidden">
+
+          <!-- 미리보기 -->
+          <div id="previewWrap" class="hidden mt-3">
+            <div class="relative inline-block">
+              <img id="previewImg" alt="첨부 사진 미리보기" class="max-h-64 rounded-xl border border-slate-200 shadow-sm cursor-zoom-in">
+              <button id="removeImageBtn" type="button" aria-label="사진 삭제"
+                class="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-slate-800 text-white text-sm grid place-items-center shadow hover:bg-rose-600">✕</button>
+            </div>
+            <p id="previewInfo" class="text-xs text-slate-500 mt-1"></p>
+          </div>
+          <div id="imageProcessing" class="hidden mt-3 flex items-center gap-2 text-sm text-slate-500">
+            <span class="spinner spinner-dark"></span> 사진을 준비하고 있어요…
+          </div>
+        </div>
+
+        <button id="submitBtn" type="button"
+          class="w-full flex items-center justify-center gap-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3.5 text-base shadow transition active:scale-[.99]">
+          <span id="submitSpinner" class="spinner hidden"></span>
+          <span id="submitLabel">질문 등록하기 🚀</span>
+        </button>
+      </div>
+
+      <div class="text-xs text-slate-500 leading-relaxed px-1">
+        💡 <b>팁</b> · 문제가 잘 보이도록 밝은 곳에서 찍어 주세요. 사진은 자동으로 크기를 줄여 업로드돼요.
+      </div>
+    </section>
+
+    <!-- ===== 탭 2: 질문 모아보기 ===== -->
+    <section id="tab-feed" class="hidden space-y-4">
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-3 flex flex-wrap gap-2 items-center">
+        <div class="relative flex-1 min-w-[160px]">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
+          <input id="searchInput" type="search" placeholder="키워드 검색 (질문·답변)"
+            class="w-full rounded-xl border border-slate-300 pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <select id="sortSelect" class="rounded-xl border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="desc">최신순</option>
+          <option value="asc">오래된순</option>
+        </select>
+        <button id="feedRefreshBtn" type="button" title="새로고침"
+          class="rounded-xl border border-slate-300 px-3 py-2 text-sm bg-white hover:bg-slate-50">🔄</button>
+      </div>
+
+      <p id="feedStats" class="text-xs text-slate-500 px-1"></p>
+      <div id="feedList" class="space-y-3"></div>
+    </section>
+
+    <!-- ===== 탭 3: 선생님 관리자 모드 ===== -->
+    <section id="tab-admin" class="hidden space-y-4">
+
+      <!-- 로그인 -->
+      <div id="adminLogin" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 max-w-sm mx-auto text-center space-y-4">
+        <div class="text-4xl">🔐</div>
+        <h2 class="font-bold text-lg">선생님 관리자 모드</h2>
+        <p class="text-sm text-slate-500">비밀번호를 입력하면 답변 작성과 수업 반영 체크를 할 수 있어요.</p>
+        <input id="adminPassword" type="password" placeholder="비밀번호" autocomplete="current-password"
+          class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-center focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <button id="adminLoginBtn" type="button"
+          class="w-full flex items-center justify-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 transition">
+          <span id="loginSpinner" class="spinner hidden"></span> 입장하기
+        </button>
+      </div>
+
+      <!-- 관리 패널 -->
+      <div id="adminPanel" class="hidden space-y-4">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-3 flex flex-wrap gap-2 items-center">
+          <div class="flex gap-1.5 flex-wrap flex-1">
+            <button class="chip active rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold" data-filter="all">전체</button>
+            <button class="chip rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold" data-filter="pending">⏳ 대기중</button>
+            <button class="chip rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold" data-filter="answered">✅ 답변완료</button>
+            <button class="chip rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold" data-filter="class">📣 수업반영</button>
+          </div>
+          <button id="adminRefreshBtn" type="button" title="새로고침" class="rounded-xl border border-slate-300 px-3 py-1.5 text-sm bg-white hover:bg-slate-50">🔄</button>
+          <button id="adminLogoutBtn" type="button" class="rounded-xl border border-slate-300 px-3 py-1.5 text-sm bg-white hover:bg-slate-50">나가기</button>
+        </div>
+
+        <p id="adminStats" class="text-xs text-slate-500 px-1"></p>
+        <div id="adminList" class="space-y-3"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===== 이미지 크게 보기 모달 ===== -->
+  <div id="imageModal" class="hidden fixed inset-0 z-50 bg-black/85 flex flex-col items-center justify-center p-4" role="dialog" aria-modal="true">
+    <button id="modalCloseBtn" type="button" aria-label="닫기"
+      class="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/15 hover:bg-white/30 text-white text-xl grid place-items-center">✕</button>
+    <img id="modalImg" alt="첨부 사진 원본" class="max-w-full max-h-[80vh] rounded-xl shadow-2xl object-contain">
+    <a id="modalLink" href="#" target="_blank" rel="noopener"
+      class="mt-4 text-sm text-white/90 underline underline-offset-4 hover:text-white">새 창에서 원본 보기 ↗</a>
+  </div>
+
+  <!-- ===== 확인 대화상자 (삭제 등) ===== -->
+  <div id="confirmModal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+      <div class="text-3xl text-center">🗑️</div>
+      <p id="confirmMessage" class="text-sm text-slate-700 text-center leading-relaxed whitespace-pre-line"></p>
+      <div class="grid grid-cols-2 gap-2">
+        <button id="confirmCancelBtn" type="button" class="rounded-xl border border-slate-300 py-2.5 text-sm font-semibold hover:bg-slate-50">취소</button>
+        <button id="confirmOkBtn" type="button" class="rounded-xl bg-rose-600 hover:bg-rose-700 text-white py-2.5 text-sm font-bold">삭제</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 토스트 ===== -->
+  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 translate-y-4 opacity-0 pointer-events-none z-50 px-4 py-2.5 rounded-xl text-sm font-semibold shadow-lg bg-slate-800 text-white max-w-[90vw] text-center"></div>
+
+  <script>
+    /* =====================================================================
+     * 설정
+     * ===================================================================== */
+    // Index.html 을 Apps Script 가 직접 서빙하면 비워둬도 됩니다 (google.script.run 사용).
+    // 외부(GitHub Pages 등)에 올릴 때만 웹 앱 URL(…/exec)을 넣어주세요.
+    const DEFAULT_API_URL = '';
+
+    // 코드에 적힌 값이 없으면, 화면 상단 설정창에서 입력해 브라우저에 저장한 값을 사용합니다.
+    function getApiUrl() {
+      try { return (localStorage.getItem('mq_api_url') || DEFAULT_API_URL).trim(); }
+      catch (e) { return DEFAULT_API_URL; }
+    }
+    function isGas() {
+      return !!(window.google && google.script && google.script.run);
+    }
+
+    const MAX_IMAGE_DIM = 1280;   // 업로드 전 리사이즈 최대 변 길이(px)
+    const JPEG_QUALITY = 0.82;
+
+    /* =====================================================================
+     * 상태
+     * ===================================================================== */
+    const state = {
+      questions: [],
+      loaded: false,
+      loading: false,
+      search: '',
+      sort: 'desc',
+      adminFilter: 'all',
+      teacherPw: safeSession('get', 'mq_teacher_pw') || '',
+      image: null   // { dataUrl, mime, size, width, height }
+    };
+
+    const $ = (sel) => document.querySelector(sel);
+    const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+    /* =====================================================================
+     * 서버 통신 레이어
+     *  - GAS 내부 서빙: google.script.run (CORS 없음)
+     *  - 외부 호스팅  : fetch → doPost (text/plain 으로 보내 preflight 회피)
+     * ===================================================================== */
+    const ACTION_MAP = {
+      apiGetQuestions: 'list',
+      apiSubmitQuestion: 'submit',
+      apiVerifyTeacher: 'verify',
+      apiSaveAnswer: 'answer',
+      apiSetClassFlag: 'class',
+      apiDeleteQuestion: 'delete'
+    };
+
+    function callServer(fnName, payload) {
+      if (isGas()) {
+        return new Promise((resolve, reject) => {
+          google.script.run
+            .withSuccessHandler((res) => {
+              if (res && res.ok) resolve(res.data);
+              else reject(new Error((res && res.error) || '알 수 없는 오류가 발생했어요.'));
+            })
+            .withFailureHandler((err) => reject(new Error(err && err.message ? err.message : String(err))))
+            [fnName](payload);
+        });
+      }
+
+      const apiUrl = getApiUrl();
+      if (!apiUrl) {
+        showSetupBanner();
+        return Promise.reject(new Error('아직 웹 앱 주소가 연결되지 않았어요. 화면 위쪽 안내를 확인해 주세요.'));
+      }
+      const body = Object.assign(
+        { action: ACTION_MAP[fnName] },
+        (payload !== null && typeof payload === 'object') ? payload : { password: payload }
+      );
+      return fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(body),
+        redirect: 'follow'
+      })
+        .then((r) => r.json())
+        .then((res) => (res && res.ok) ? res.data : Promise.reject(new Error((res && res.error) || '요청 실패')));
+    }
+
+    /* =====================================================================
+     * 공통 유틸
+     * ===================================================================== */
+    function safeSession(op, key, val) {
+      try {
+        if (op === 'get') return sessionStorage.getItem(key);
+        if (op === 'set') return sessionStorage.setItem(key, val);
+        if (op === 'del') return sessionStorage.removeItem(key);
+      } catch (e) { return null; }
+    }
+
+    // 이 브라우저에서 등록한 질문 { id: 삭제키 } - 학생이 자기 질문을 삭제할 때 사용
+    function myQuestions() {
+      try { return JSON.parse(localStorage.getItem('mq_my_questions') || '{}'); } catch (e) { return {}; }
+    }
+    function rememberMyQuestion(id, key) {
+      const map = myQuestions(); map[id] = key;
+      try { localStorage.setItem('mq_my_questions', JSON.stringify(map)); } catch (e) { /* 저장 불가 환경 */ }
+    }
+    function forgetMyQuestion(id) {
+      const map = myQuestions(); delete map[id];
+      try { localStorage.setItem('mq_my_questions', JSON.stringify(map)); } catch (e) { /* ignore */ }
+    }
+    function isMine(id) { return !!myQuestions()[id]; }
+    function makeOwnerKey() {
+      if (window.crypto && crypto.randomUUID) return crypto.randomUUID().replace(/-/g, '');
+      return Math.random().toString(36).slice(2) + Date.now().toString(36) + Math.random().toString(36).slice(2);
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // 구글 드라이브 URL → 파일 ID
+    function driveId(url) {
+      const m = String(url || '').match(/[-\w]{25,}/);
+      return m ? m[0] : '';
+    }
+    // <img> 에 바로 쓸 수 있는 URL (1차 / 2차 fallback)
+    function imgSrc(url) {
+      const id = driveId(url);
+      return id ? `https://lh3.googleusercontent.com/d/${id}` : url;
+    }
+    function imgFallback(url) {
+      const id = driveId(url);
+      return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w1600` : url;
+    }
+
+    let toastTimer = null;
+    function toast(msg, type = 'info') {
+      const el = $('#toast');
+      const colors = {
+        info: 'bg-slate-800 text-white',
+        success: 'bg-emerald-600 text-white',
+        warn: 'bg-amber-500 text-white',
+        error: 'bg-rose-600 text-white'
+      };
+      el.className = `fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl text-sm font-semibold shadow-lg max-w-[90vw] text-center ${colors[type] || colors.info}`;
+      el.textContent = msg;
+      requestAnimationFrame(() => { el.style.opacity = '1'; el.style.transform = 'translate(-50%, 0)'; });
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        el.style.opacity = '0'; el.style.transform = 'translate(-50%, 1rem)';
+      }, 2600);
+    }
+
+    function statusBadge(q) {
+      return q.status === '답변완료'
+        ? '<span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5 text-[11px] font-bold">✅ 답변완료</span>'
+        : '<span class="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 px-2 py-0.5 text-[11px] font-bold">⏳ 대기중</span>';
+    }
+    function classBadge(q) {
+      return q.inClass
+        ? '<span class="inline-flex items-center gap-1 rounded-full bg-violet-100 text-violet-700 px-2 py-0.5 text-[11px] font-bold">📣 수업에서 다룰 질문</span>'
+        : '';
+    }
+    function imageThumb(q, extraClass = '') {
+      if (!q.imageUrl) return '';
+      return `
+        <button type="button" class="js-open-image mt-3 block ${extraClass}" data-url="${escapeHtml(q.imageUrl)}" aria-label="사진 크게 보기">
+          <img src="${escapeHtml(imgSrc(q.imageUrl))}" data-fallback="${escapeHtml(imgFallback(q.imageUrl))}"
+               onerror="if(this.dataset.fallback&&this.src!==this.dataset.fallback){this.src=this.dataset.fallback;}else{this.onerror=null;}"
+               loading="lazy" alt="첨부된 수식 사진"
+               class="max-h-60 rounded-xl border border-slate-200 shadow-sm cursor-zoom-in hover:opacity-90 transition">
+        </button>`;
+    }
+    function skeletonCards(n = 3) {
+      return Array.from({ length: n }).map(() => `
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+          <div class="skeleton h-3 w-28 rounded"></div>
+          <div class="skeleton h-4 w-full rounded"></div>
+          <div class="skeleton h-4 w-3/4 rounded"></div>
+          <div class="skeleton h-36 w-1/2 rounded-xl"></div>
+        </div>`).join('');
+    }
+
+    /* =====================================================================
+     * 탭 전환
+     * ===================================================================== */
+    function switchTab(name) {
+      $$('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+      ['ask', 'feed', 'admin'].forEach((t) => $(`#tab-${t}`).classList.toggle('hidden', t !== name));
+      if (name === 'feed' || name === 'admin') {
+        if (!state.loaded) loadQuestions();
+        else { renderFeed(); renderAdmin(); }
+      }
+      if (name === 'admin') {
+        const loggedIn = !!state.teacherPw;
+        $('#adminLogin').classList.toggle('hidden', loggedIn);
+        $('#adminPanel').classList.toggle('hidden', !loggedIn);
+      }
+      window.scrollTo({ top: 0 });
+    }
+    $$('.tab-btn').forEach((b) => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+
+    /* =====================================================================
+     * 데이터 로드
+     * ===================================================================== */
+    async function loadQuestions() {
+      if (state.loading) return;
+      state.loading = true;
+      $('#feedList').innerHTML = skeletonCards();
+      $('#adminList').innerHTML = skeletonCards();
+      try {
+        state.questions = await callServer('apiGetQuestions');
+        state.loaded = true;
+        // 선생님이 이미 지운 질문은 '내 질문' 기억에서 정리
+        const ids = new Set(state.questions.map((q) => q.id));
+        Object.keys(myQuestions()).forEach((id) => { if (!ids.has(id)) forgetMyQuestion(id); });
+      } catch (err) {
+        toast('질문을 불러오지 못했어요: ' + err.message, 'error');
+        state.questions = state.questions || [];
+      } finally {
+        state.loading = false;
+        renderFeed();
+        renderAdmin();
+      }
+    }
+
+    /* =====================================================================
+     * 탭 1: 질문하기
+     * ===================================================================== */
+    const questionText = $('#questionText');
+    questionText.addEventListener('input', () => { $('#charCount').textContent = questionText.value.length; });
+
+    $('#cameraInput').addEventListener('change', (e) => handleFile(e.target.files[0], e.target));
+    $('#fileInput').addEventListener('change', (e) => handleFile(e.target.files[0], e.target));
+    $('#removeImageBtn').addEventListener('click', clearImage);
+    $('#previewImg').addEventListener('click', () => { if (state.image) openImage(state.image.dataUrl, false); });
+
+    async function handleFile(file, inputEl) {
+      if (!file) return;
+      if (!file.type.startsWith('image/') && !/\.(heic|heif)$/i.test(file.name)) {
+        toast('이미지 파일만 첨부할 수 있어요.', 'warn');
+        inputEl.value = '';
+        return;
+      }
+      $('#imageProcessing').classList.remove('hidden');
+      $('#previewWrap').classList.add('hidden');
+      try {
+        state.image = await compressImage(file);
+        $('#previewImg').src = state.image.dataUrl;
+        $('#previewInfo').textContent =
+          `${state.image.width}×${state.image.height} · 약 ${(state.image.size / 1024).toFixed(0)}KB` +
+          (file.size > state.image.size ? ` (원본 ${(file.size / 1024 / 1024).toFixed(1)}MB 에서 압축)` : '');
+        $('#previewWrap').classList.remove('hidden');
+      } catch (err) {
+        toast('사진을 읽을 수 없어요. 다른 사진을 선택해 주세요.', 'error');
+        state.image = null;
+      } finally {
+        $('#imageProcessing').classList.add('hidden');
+        inputEl.value = ''; // 같은 파일 재선택 허용
+      }
+    }
+
+    function clearImage() {
+      state.image = null;
+      $('#previewImg').src = '';
+      $('#previewWrap').classList.add('hidden');
+    }
+
+    // Canvas 로 리사이즈 + JPEG 압축 → Base64 Data URL
+    function compressImage(file) {
+      return new Promise((resolve, reject) => {
+        const objectUrl = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const scale = Math.min(1, MAX_IMAGE_DIM / Math.max(img.naturalWidth, img.naturalHeight));
+            const w = Math.max(1, Math.round(img.naturalWidth * scale));
+            const h = Math.max(1, Math.round(img.naturalHeight * scale));
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h); // PNG 투명 배경 → 흰색
+            ctx.drawImage(img, 0, 0, w, h);
+            const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+            URL.revokeObjectURL(objectUrl);
+            resolve({ dataUrl, mime: 'image/jpeg', size: Math.round(dataUrl.length * 3 / 4), width: w, height: h });
+          } catch (e) { URL.revokeObjectURL(objectUrl); fallbackRaw(); }
+        };
+        img.onerror = () => { URL.revokeObjectURL(objectUrl); fallbackRaw(); };
+        img.src = objectUrl;
+
+        // 브라우저가 디코딩하지 못하는 형식이면 원본을 그대로 Base64 로
+        function fallbackRaw() {
+          if (file.size > 8 * 1024 * 1024) return reject(new Error('too large'));
+          const reader = new FileReader();
+          reader.onload = () => resolve({ dataUrl: reader.result, mime: file.type || 'image/jpeg', size: file.size, width: 0, height: 0 });
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(file);
+        }
+      });
+    }
+
+    $('#submitBtn').addEventListener('click', submitQuestion);
+
+    async function submitQuestion() {
+      const text = questionText.value.trim();
+      if (!text && !state.image) {
+        toast('질문 내용을 쓰거나 사진을 첨부해 주세요 🙂', 'warn');
+        questionText.focus();
+        return;
+      }
+      setSubmitting(true);
+      try {
+        const ownerKey = makeOwnerKey();
+        const payload = { question: text, ownerKey };
+        if (state.image) {
+          payload.imageBase64 = state.image.dataUrl.split(',')[1];
+          payload.mimeType = state.image.mime;
+        }
+        const res = await callServer('apiSubmitQuestion', payload);
+        if (res && res.id) rememberMyQuestion(res.id, ownerKey);
+        toast('질문이 등록되었어요! 🎉', 'success');
+        questionText.value = '';
+        $('#charCount').textContent = '0';
+        clearImage();
+        state.loaded = false;
+        switchTab('feed');
+      } catch (err) {
+        toast('등록 실패: ' + err.message, 'error');
+      } finally {
+        setSubmitting(false);
+      }
+    }
+
+    function setSubmitting(on) {
+      $('#submitBtn').disabled = on;
+      $('#submitSpinner').classList.toggle('hidden', !on);
+      $('#submitLabel').textContent = on ? '등록 중이에요…' : '질문 등록하기 🚀';
+    }
+
+    /* =====================================================================
+     * 탭 2: 질문 모아보기
+     * ===================================================================== */
+    $('#searchInput').addEventListener('input', (e) => { state.search = e.target.value.trim().toLowerCase(); renderFeed(); });
+    $('#sortSelect').addEventListener('change', (e) => { state.sort = e.target.value; renderFeed(); });
+    $('#feedRefreshBtn').addEventListener('click', loadQuestions);
+
+    function filteredFeed() {
+      let list = state.questions.slice();
+      if (state.search) {
+        list = list.filter((q) =>
+          (q.question || '').toLowerCase().includes(state.search) ||
+          (q.answer || '').toLowerCase().includes(state.search));
+      }
+      list.sort((a, b) => state.sort === 'asc' ? a.epoch - b.epoch : b.epoch - a.epoch);
+      return list;
+    }
+
+    function renderFeed() {
+      if (state.loading) return;
+      const list = filteredFeed();
+      const answered = state.questions.filter((q) => q.status === '답변완료').length;
+      $('#feedStats').textContent = state.questions.length
+        ? `총 ${state.questions.length}개 질문 · 답변완료 ${answered}개` + (state.search ? ` · 검색결과 ${list.length}개` : '')
+        : '';
+
+      if (!list.length) {
+        $('#feedList').innerHTML = `
+          <div class="bg-white rounded-2xl border border-dashed border-slate-300 p-10 text-center text-slate-500">
+            <div class="text-4xl mb-2">${state.search ? '🔎' : '📭'}</div>
+            <p class="text-sm">${state.search ? '검색 결과가 없어요.' : '아직 등록된 질문이 없어요.<br>첫 질문을 남겨볼까요?'}</p>
+          </div>`;
+        return;
+      }
+
+      $('#feedList').innerHTML = list.map((q) => `
+        <article class="bg-white rounded-2xl shadow-sm border ${q.inClass ? 'border-violet-300' : 'border-slate-200'} p-4">
+          <div class="flex items-center justify-between gap-2 text-xs text-slate-500">
+            <span>🕒 ${escapeHtml(q.time)}</span>
+            <div class="flex gap-1.5">${classBadge(q)}${statusBadge(q)}</div>
+          </div>
+          ${q.question ? `<p class="mt-2.5 text-[15px] leading-relaxed whitespace-pre-wrap break-words">${escapeHtml(q.question)}</p>` : '<p class="mt-2.5 text-sm text-slate-400 italic">(사진으로만 질문했어요)</p>'}
+          ${imageThumb(q)}
+          ${q.answer ? `
+            <div class="mt-3 rounded-xl bg-emerald-50 border-l-4 border-emerald-400 px-3.5 py-3">
+              <p class="text-xs font-bold text-emerald-700 mb-1">👩‍🏫 선생님 답변</p>
+              <p class="text-[15px] leading-relaxed whitespace-pre-wrap break-words text-slate-800">${escapeHtml(q.answer)}</p>
+            </div>` : ''}
+          ${isMine(q.id) ? `
+            <div class="mt-3 flex items-center justify-between gap-2">
+              <span class="text-[11px] text-brand-600 font-semibold">✨ 이 기기에서 올린 내 질문</span>
+              <button type="button" class="js-feed-delete inline-flex items-center gap-1 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-semibold px-2.5 py-1.5" data-id="${escapeHtml(q.id)}">🗑️ 삭제</button>
+            </div>` : ''}
+        </article>`).join('');
+    }
+
+    // 학생: 내 질문 삭제
+    $('#feedList').addEventListener('click', async (e) => {
+      const btn = e.target.closest('.js-feed-delete');
+      if (!btn) return;
+      const id = btn.dataset.id;
+      const ok = await confirmDialog('이 질문을 삭제할까요?\n첨부한 사진도 함께 지워지고 되돌릴 수 없어요.');
+      if (!ok) return;
+      btn.disabled = true;
+      try {
+        await callServer('apiDeleteQuestion', { id, ownerKey: myQuestions()[id] || '' });
+        forgetMyQuestion(id);
+        state.questions = state.questions.filter((q) => q.id !== id);
+        toast('질문을 삭제했어요.', 'success');
+        renderFeed(); renderAdmin();
+      } catch (err) {
+        toast('삭제 실패: ' + err.message, 'error');
+        btn.disabled = false;
+      }
+    });
+
+    /* =====================================================================
+     * 탭 3: 선생님 관리자 모드
+     * ===================================================================== */
+    $('#adminLoginBtn').addEventListener('click', adminLogin);
+    $('#adminPassword').addEventListener('keydown', (e) => { if (e.key === 'Enter') adminLogin(); });
+    $('#adminLogoutBtn').addEventListener('click', () => {
+      state.teacherPw = '';
+      safeSession('del', 'mq_teacher_pw');
+      $('#adminPassword').value = '';
+      switchTab('admin');
+      toast('관리자 모드에서 나왔어요.');
+    });
+    $('#adminRefreshBtn').addEventListener('click', loadQuestions);
+    $$('.chip').forEach((c) => c.addEventListener('click', () => {
+      $$('.chip').forEach((x) => x.classList.toggle('active', x === c));
+      state.adminFilter = c.dataset.filter;
+      renderAdmin();
+    }));
+
+    async function adminLogin() {
+      const pw = $('#adminPassword').value;
+      if (!pw) { toast('비밀번호를 입력해 주세요.', 'warn'); return; }
+      $('#loginSpinner').classList.remove('hidden');
+      $('#adminLoginBtn').disabled = true;
+      try {
+        await callServer('apiVerifyTeacher', pw);
+        state.teacherPw = pw;
+        safeSession('set', 'mq_teacher_pw', pw);
+        toast('선생님, 환영합니다! 👋', 'success');
+        switchTab('admin');
+      } catch (err) {
+        toast(err.message, 'error');
+      } finally {
+        $('#loginSpinner').classList.add('hidden');
+        $('#adminLoginBtn').disabled = false;
+      }
+    }
+
+    function filteredAdmin() {
+      const list = state.questions.slice().sort((a, b) => b.epoch - a.epoch); // 항상 최신순
+      switch (state.adminFilter) {
+        case 'pending':  return list.filter((q) => q.status !== '답변완료');
+        case 'answered': return list.filter((q) => q.status === '답변완료');
+        case 'class':    return list.filter((q) => q.inClass);
+        default:         return list;
+      }
+    }
+
+    function renderAdmin() {
+      if (state.loading || !state.teacherPw) return;
+      const list = filteredAdmin();
+      const pending = state.questions.filter((q) => q.status !== '답변완료').length;
+      const inClass = state.questions.filter((q) => q.inClass).length;
+      $('#adminStats').textContent = state.questions.length
+        ? `총 ${state.questions.length}개 · 대기중 ${pending}개 · 수업반영 ${inClass}개`
+        : '';
+
+      if (!list.length) {
+        $('#adminList').innerHTML = `
+          <div class="bg-white rounded-2xl border border-dashed border-slate-300 p-10 text-center text-slate-500">
+            <div class="text-4xl mb-2">🗂️</div><p class="text-sm">해당하는 질문이 없어요.</p>
+          </div>`;
+        return;
+      }
+
+      $('#adminList').innerHTML = list.map((q) => `
+        <article class="bg-white rounded-2xl shadow-sm border ${q.inClass ? 'border-violet-300' : 'border-slate-200'} p-4" data-id="${escapeHtml(q.id)}">
+          <div class="flex items-center justify-between gap-2 text-xs text-slate-500">
+            <span>🕒 ${escapeHtml(q.time)}</span>
+            <div class="flex gap-1.5">${classBadge(q)}${statusBadge(q)}</div>
+          </div>
+          ${q.question ? `<p class="mt-2.5 text-[15px] leading-relaxed whitespace-pre-wrap break-words">${escapeHtml(q.question)}</p>` : '<p class="mt-2.5 text-sm text-slate-400 italic">(사진으로만 질문했어요)</p>'}
+          ${imageThumb(q)}
+
+          <div class="mt-4 space-y-2">
+            <label class="block text-xs font-bold text-slate-600">선생님 답변</label>
+            <textarea class="js-answer w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" rows="3"
+              placeholder="답변을 입력하세요 (저장하면 '답변완료'로 바뀝니다)">${escapeHtml(q.answer)}</textarea>
+            <div class="flex items-center justify-between gap-3 flex-wrap">
+              <label class="inline-flex items-center gap-2 text-sm font-semibold text-violet-700 cursor-pointer select-none">
+                <input type="checkbox" class="js-class w-4 h-4 accent-violet-600" ${q.inClass ? 'checked' : ''}>
+                📣 수업 반영 (오늘 오프닝에 다루기)
+              </label>
+              <div class="flex gap-2">
+                <button type="button" class="js-delete inline-flex items-center gap-1 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:opacity-60 text-sm font-semibold px-3 py-2 transition">🗑️ 삭제</button>
+                <button type="button" class="js-save inline-flex items-center gap-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-sm font-bold px-4 py-2 transition">
+                  <span class="spinner hidden"></span><span>💾 저장</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </article>`).join('');
+    }
+
+    // 관리자 리스트 이벤트 (위임)
+    $('#adminList').addEventListener('click', async (e) => {
+      const saveBtn = e.target.closest('.js-save');
+      if (!saveBtn) return;
+      const card = saveBtn.closest('article');
+      const id = card.dataset.id;
+      const answer = card.querySelector('.js-answer').value.trim();
+      const spinner = saveBtn.querySelector('.spinner');
+
+      saveBtn.disabled = true; spinner.classList.remove('hidden');
+      try {
+        const res = await callServer('apiSaveAnswer', { id, answer, password: state.teacherPw });
+        const q = state.questions.find((x) => x.id === id);
+        if (q) { q.answer = res.answer; q.status = res.status; }
+        toast(res.status === '답변완료' ? '답변이 저장되었어요 ✅' : '답변을 비워 대기중으로 바뀌었어요.', 'success');
+        renderAdmin();
+      } catch (err) {
+        toast('저장 실패: ' + err.message, 'error');
+        if (/비밀번호/.test(err.message)) forceLogout();
+      } finally {
+        saveBtn.disabled = false; spinner.classList.add('hidden');
+      }
+    });
+
+    $('#adminList').addEventListener('change', async (e) => {
+      const cb = e.target.closest('.js-class');
+      if (!cb) return;
+      const card = cb.closest('article');
+      const id = card.dataset.id;
+      const q = state.questions.find((x) => x.id === id);
+      const prev = q ? q.inClass : !cb.checked;
+
+      if (q) q.inClass = cb.checked; // 낙관적 업데이트
+      cb.disabled = true;
+      try {
+        await callServer('apiSetClassFlag', { id, inClass: cb.checked, password: state.teacherPw });
+        toast(cb.checked ? '수업 반영 질문으로 체크했어요 📣' : '수업 반영을 해제했어요.', 'success');
+        renderAdmin();
+      } catch (err) {
+        if (q) q.inClass = prev;
+        toast('변경 실패: ' + err.message, 'error');
+        renderAdmin();
+        if (/비밀번호/.test(err.message)) forceLogout();
+      }
+    });
+
+    // 선생님: 질문 삭제
+    $('#adminList').addEventListener('click', async (e) => {
+      const btn = e.target.closest('.js-delete');
+      if (!btn) return;
+      const card = btn.closest('article');
+      const id = card.dataset.id;
+      const q = state.questions.find((x) => x.id === id);
+      const preview = q && q.question ? `"${q.question.slice(0, 40)}${q.question.length > 40 ? '…' : ''}"` : '(사진 질문)';
+      const ok = await confirmDialog(`${preview}\n\n이 질문을 삭제할까요? 첨부 사진도 휴지통으로 이동하며 되돌릴 수 없어요.`);
+      if (!ok) return;
+      btn.disabled = true;
+      try {
+        await callServer('apiDeleteQuestion', { id, password: state.teacherPw });
+        forgetMyQuestion(id);
+        state.questions = state.questions.filter((x) => x.id !== id);
+        toast('질문을 삭제했어요.', 'success');
+        renderAdmin(); renderFeed();
+      } catch (err) {
+        toast('삭제 실패: ' + err.message, 'error');
+        btn.disabled = false;
+        if (/비밀번호/.test(err.message)) forceLogout();
+      }
+    });
+
+    function forceLogout() {
+      state.teacherPw = '';
+      safeSession('del', 'mq_teacher_pw');
+      switchTab('admin');
+    }
+
+    /* =====================================================================
+     * 확인 대화상자 (Promise<boolean>)
+     * ===================================================================== */
+    let confirmResolve = null;
+    function confirmDialog(message) {
+      $('#confirmMessage').textContent = message;
+      $('#confirmModal').classList.remove('hidden');
+      return new Promise((resolve) => { confirmResolve = resolve; });
+    }
+    function closeConfirm(result) {
+      $('#confirmModal').classList.add('hidden');
+      if (confirmResolve) { confirmResolve(result); confirmResolve = null; }
+    }
+    $('#confirmOkBtn').addEventListener('click', () => closeConfirm(true));
+    $('#confirmCancelBtn').addEventListener('click', () => closeConfirm(false));
+    $('#confirmModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeConfirm(false); });
+
+    /* =====================================================================
+     * 이미지 모달 (피드/관리자/미리보기 공용)
+     * ===================================================================== */
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('.js-open-image');
+      if (btn) openImage(btn.dataset.url, true);
+    });
+
+    function openImage(url, isDrive) {
+      const modal = $('#imageModal');
+      const img = $('#modalImg');
+      const link = $('#modalLink');
+      img.src = isDrive ? imgSrc(url) : url;
+      img.onerror = () => { if (isDrive) { img.onerror = null; img.src = imgFallback(url); } };
+      link.href = isDrive ? url : '#';
+      link.classList.toggle('hidden', !isDrive);
+      modal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeImage() {
+      $('#imageModal').classList.add('hidden');
+      $('#modalImg').src = '';
+      document.body.style.overflow = '';
+    }
+    $('#modalCloseBtn').addEventListener('click', closeImage);
+    $('#imageModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeImage(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      closeImage();
+      if (!$('#confirmModal').classList.contains('hidden')) closeConfirm(false);
+    });
+
+    /* =====================================================================
+     * 웹 앱 주소 연결 배너 (Apps Script 밖에서 열었을 때)
+     * ===================================================================== */
+    function showSetupBanner() {
+      $('#setupBanner').classList.remove('hidden');
+      $('#apiUrlInput').value = getApiUrl();
+    }
+    $('#apiUrlSaveBtn').addEventListener('click', async () => {
+      const url = $('#apiUrlInput').value.trim();
+      if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/(exec|dev)$/.test(url)) {
+        toast('주소 형식이 맞지 않아요. …/exec 로 끝나는 웹 앱 URL 을 넣어 주세요.', 'warn');
+        return;
+      }
+      try { localStorage.setItem('mq_api_url', url); } catch (e) { /* 저장 불가 환경 */ }
+      $('#apiUrlSaveBtn').disabled = true;
+      try {
+        await callServer('apiGetQuestions');
+        $('#setupBanner').classList.add('hidden');
+        state.loaded = false;
+        toast('서버와 연결되었어요! ✅', 'success');
+      } catch (err) {
+        toast('연결 실패: ' + err.message, 'error');
+      } finally {
+        $('#apiUrlSaveBtn').disabled = false;
+      }
+    });
+    $('#apiUrlInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#apiUrlSaveBtn').click(); });
+
+    /* =====================================================================
+     * 초기화
+     * ===================================================================== */
+    if (!isGas() && !getApiUrl()) showSetupBanner();
+    switchTab('ask');
+  </script>
+</body>
+</html>
