@@ -30,9 +30,11 @@ const CONFIG = {
   // 이미지가 저장될 드라이브 폴더 이름 (없으면 자동 생성)
   DRIVE_FOLDER_NAME: '수학질문톡_이미지',
 
-  // 선생님 관리자 모드 비밀번호 - 반드시 변경하세요!
-  // (프로젝트 설정 > 스크립트 속성 에 TEACHER_PASSWORD 를 넣으면 그 값이 우선합니다)
-  TEACHER_PASSWORD: 'math1234',
+  // 선생님 관리자 모드 비밀번호
+  // ★ 코드에 쓰지 말고 [프로젝트 설정 > 스크립트 속성] 에 TEACHER_PASSWORD 로 넣어 주세요.
+  //   (이 저장소는 공개되어 있어 여기에 적으면 누구나 볼 수 있습니다)
+  //   비워 두면 속성 값만 사용하며, 속성도 없으면 관리자 모드가 잠깁니다.
+  TEACHER_PASSWORD: '',
 
   MAX_IMAGE_BYTES: 8 * 1024 * 1024, // 8MB (프론트에서 이미 압축해서 보냄)
   MAX_QUESTION_LENGTH: 1000,
@@ -74,7 +76,7 @@ function setupSheet() {
   console.log('✅ 설정 완료');
   console.log('시트: ' + sheet.getParent().getUrl());
   console.log('이미지 폴더: ' + folder.getUrl());
-  console.log('선생님 비밀번호: ' + getTeacherPassword_());
+  console.log('선생님 비밀번호: ' + (getTeacherPassword_() ? '설정됨 (스크립트 속성)' : '⚠️ 미설정 - 스크립트 속성에 TEACHER_PASSWORD 를 추가하세요'));
 }
 
 // ------------------------------------------------------------
@@ -285,7 +287,7 @@ function apiDeleteQuestion(payload) {
       const storedKey = String(values[COL.KEY - 1] || '');
       const imageUrl = String(values[COL.IMAGE - 1] || '');
 
-      const isTeacher = password && password === getTeacherPassword_();
+      const isTeacher = isTeacherPassword_(password);
       const isOwner = ownerKey && storedKey && ownerKey === storedKey;
       if (!isTeacher && !isOwner) {
         throw new Error(password
@@ -478,11 +480,20 @@ function findRowById_(sheet, id) {
 // ------------------------------------------------------------
 function getTeacherPassword_() {
   const fromProps = PropertiesService.getScriptProperties().getProperty('TEACHER_PASSWORD');
-  return fromProps || CONFIG.TEACHER_PASSWORD;
+  return String(fromProps || CONFIG.TEACHER_PASSWORD || '');
+}
+
+/** 입력한 비밀번호가 맞으면 true (비밀번호 미설정이면 항상 false) */
+function isTeacherPassword_(password) {
+  const expected = getTeacherPassword_();
+  return !!expected && String(password || '') === expected;
 }
 
 function checkTeacher_(password) {
-  if (String(password || '') !== getTeacherPassword_()) {
+  if (!getTeacherPassword_()) {
+    throw new Error('선생님 비밀번호가 아직 설정되지 않았습니다. Apps Script [프로젝트 설정 > 스크립트 속성] 에 TEACHER_PASSWORD 를 추가해 주세요.');
+  }
+  if (!isTeacherPassword_(password)) {
     throw new Error('선생님 비밀번호가 올바르지 않습니다.');
   }
 }
