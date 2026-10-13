@@ -95,7 +95,8 @@ function doGet(e) {
     return jsonOutput_(routeAction_(params.action, params));
   }
 
-  return HtmlService.createHtmlOutputFromFile('Index')
+  // 파일 이름은 소문자 index (Vercel/GitHub Pages 같은 정적 호스팅도 index.html 을 첫 페이지로 찾음)
+  return HtmlService.createHtmlOutputFromFile('index')
     .setTitle(CONFIG.APP_TITLE)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);

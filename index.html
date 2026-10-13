@@ -214,9 +214,9 @@
     /* =====================================================================
      * 설정
      * ===================================================================== */
-    // Index.html 을 Apps Script 가 직접 서빙하면 비워둬도 됩니다 (google.script.run 사용).
-    // 외부(GitHub Pages 등)에 올릴 때만 웹 앱 URL(…/exec)을 넣어주세요.
-    const DEFAULT_API_URL = '';
+    // Apps Script 가 직접 서빙할 때는 google.script.run 을 쓰므로 이 값은 무시됩니다.
+    // Vercel/GitHub Pages 등 외부에서 열었을 때 연결할 웹 앱 URL(…/exec) 입니다.
+    const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbzo2yrBEAkYt2B1uKz94xoQJ5aenql5yzNpklAS_AGDc513IovwBR-9opWYNUi7flTmXA/exec';
 
     // 코드에 적힌 값이 없으면, 화면 상단 설정창에서 입력해 브라우저에 저장한 값을 사용합니다.
     function getApiUrl() {
